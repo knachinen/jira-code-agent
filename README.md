@@ -51,6 +51,7 @@ python agent_runner.py --safe-dir .
 ### Command Line Arguments
 
 *   `--safe-dir <path>`: **(Required)** The directory where the agent is allowed to modify files. Use `.` for the current directory.
+*   `--auto-review`: Enable the iterative **Plan-Execute-Review** cycle. If set, the agent will critique its own work and self-correct (up to 3 times) before finishing. Default: Disabled (One-shot mode).
 *   `--dry-run`: Run in "read-only" mode. The agent will analyze and log what it *would* do, but won't modify files or update Jira. Great for testing!
 *   `--interval <seconds>`: How often to check Jira (default: 10 seconds).
 *   `--verbose`: Enable detailed debug logging.
@@ -60,6 +61,11 @@ python agent_runner.py --safe-dir .
 Test the agent without making changes:
 ```bash
 python agent_runner.py --safe-dir . --dry-run --verbose
+```
+
+Run with self-correction enabled:
+```bash
+python agent_runner.py --safe-dir . --auto-review
 ```
 
 ## 🔄 How It Works

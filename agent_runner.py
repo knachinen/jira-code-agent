@@ -10,6 +10,7 @@ from jira_agent.agent import BugFixAgent
 def main():
     parser = argparse.ArgumentParser(description="Jira Bug Fix Agent v0.3 (Modular)")
     parser.add_argument("--interval", type=int, default=10, help="Jira check interval (seconds)")
+    parser.add_argument("--auto-review", action="store_true", help="Enable iterative self-correction loop (Plan-Execute-Review)")
     parser.add_argument("--dry-run", action="store_true", help="Monitor and analyze without modifying files")
     parser.add_argument("--safe-dir", type=str, default=".", help="Restrict modifications to this directory")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
@@ -34,7 +35,8 @@ def main():
         jira=jira_client,
         llm=llm_client,
         safe_dir=args.safe_dir,
-        dry_run=args.dry_run
+        dry_run=args.dry_run,
+        auto_review=args.auto_review
     )
 
     # Signal Handling for Graceful Shutdown
