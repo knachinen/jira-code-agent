@@ -8,7 +8,7 @@ from jira_agent.llm_client import GeminiClient
 from jira_agent.agent import BugFixAgent
 
 def main():
-    parser = argparse.ArgumentParser(description="Jira Bug Fix Agent v3.0 (Modular)")
+    parser = argparse.ArgumentParser(description="Jira Bug Fix Agent v0.3 (Modular)")
     parser.add_argument("--interval", type=int, default=10, help="Jira check interval (seconds)")
     parser.add_argument("--dry-run", action="store_true", help="Monitor and analyze without modifying files")
     parser.add_argument("--safe-dir", type=str, default=".", help="Restrict modifications to this directory")

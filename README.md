@@ -1,4 +1,4 @@
-# 🐞 Jira Bug Fix Agent (v3.0)
+# 🐞 Jira Bug Fix Agent (v0.3)
 
 Welcome! This is an intelligent, automated agent designed to help your team squash bugs faster. It monitors your Jira project for new bug reports, analyzes the relevant code using Google's Gemini LLM, and automatically proposes fixes—all while keeping your codebase safe.
 
@@ -44,7 +44,7 @@ Welcome! This is an intelligent, automated agent designed to help your team squa
 To start the agent, run the following command:
 
 ```bash
-python run_agent_v3.py --safe-dir .
+python agent_runner.py --safe-dir .
 ```
 
 ### Command Line Arguments
@@ -58,7 +58,7 @@ python run_agent_v3.py --safe-dir .
 
 Test the agent without making changes:
 ```bash
-python run_agent_v3.py --safe-dir . --dry-run --verbose
+python agent_runner.py --safe-dir . --dry-run --verbose
 ```
 
 ## 🔄 How It Works
