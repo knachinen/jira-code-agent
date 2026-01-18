@@ -11,7 +11,7 @@ from .file_utils import (
     get_codebase_structure, backup_file, write_to_file, read_from_file
 )
 from .jira_client import JiraClient
-from .llm_client import GeminiClient
+from .llm_client import LLMClient
 from .state import load_state, save_state
 
 logger = logging.getLogger(__name__)
@@ -19,129 +19,67 @@ logger = logging.getLogger(__name__)
 class BugFixAgent:
     """The core agent that monitors Jira and applies fixes."""
 
-        def __init__(
-
-            self, 
-
-            jira: JiraClient, 
-
-            llm: GeminiClient, 
-
-            safe_dir: str = ".", 
-
-            dry_run: bool = False,
-
-            auto_review: bool = False
-
-        ):
-
-            self.jira = jira
-
-            self.llm = llm
-
-            self.safe_dir = safe_dir
-
-            self.dry_run = dry_run
-
-            self.auto_review = auto_review
-
-            self.running = True
-
+    def __init__(
+        self, 
+        jira: JiraClient, 
+        llm: LLMClient, 
+        safe_dir: str = ".", 
+        dry_run: bool = False,
+        auto_review: bool = False
+    ):
+        self.jira = jira
+        self.llm = llm
+        self.safe_dir = safe_dir
+        self.dry_run = dry_run
+        self.auto_review = auto_review
+        self.running = True
+        
+        # Load persisted state
+        self.start_time, self.known_issues = load_state()
+        if not self.start_time:
+            self.start_time = datetime.now()
             
+        logger.info(f"Agent initialized. Safe directory: {self.safe_dir}")
+        logger.info(f"Auto-Review: {'Enabled' if self.auto_review else 'Disabled'}")
+        if self.dry_run:
+            logger.info("DRY-RUN mode enabled.")
 
-            # Load persisted state
+    def stop(self) -> None:
+        """Signals the agent to stop after the current loop."""
+        self.running = False
 
-            self.start_time, self.known_issues = load_state()
+    def find_files_in_text(self, text: str) -> List[str]:
+        """Extracts filenames from a block of text."""
+        matches = re.findall(r'\b[\w\-\/]+\.(?:py|js|ts|html|css|json)\b', text)
+        return list(set(matches))
 
-            if not self.start_time:
+    def process_issue(self, issue_key: str) -> None:
+        """Processes a single Jira issue with an iterative review loop."""
+        issue = self.jira.get_issue(issue_key)
+        if not issue:
+            return
 
-                self.start_time = datetime.now()
+        summary = issue.fields.summary
+        original_description = issue.fields.description or ""
+        current_description = original_description
+        
+        logger.info(f"Processing {issue_key}: {summary}")
 
-                
+        if not self.dry_run:
+            self.jira.add_comment(issue_key, "🤖 *Bug Fix Agent* has started analyzing this issue.")
+            self.jira.transition_issue(issue_key, ["In Progress", "진행 중", "시작"])
 
-            logger.info(f"Agent initialized. Safe directory: {self.safe_dir}")
+        MAX_RETRIES = 3 if self.auto_review else 1
+        attempt = 0
+        modified_files_history = set() # Track all files touched across attempts
+        critique_history = [] # Track critiques to detect cycles
 
-            logger.info(f"Auto-Review: {'Enabled' if self.auto_review else 'Disabled'}")
-
-            if self.dry_run:
-
-                logger.info("DRY-RUN mode enabled.")
-
-    
-
-        def stop(self) -> None:
-
-            """Signals the agent to stop after the current loop."""
-
-            self.running = False
-
-    
-
-        def find_files_in_text(self, text: str) -> List[str]:
-
-            """Extracts filenames from a block of text."""
-
-            matches = re.findall(r'\b[\w\-\/]+\.(?:py|js|ts|html|css|json)\b', text)
-
-            return list(set(matches))
-
-    
-
-        def process_issue(self, issue_key: str) -> None:
-
-            """Processes a single Jira issue with an iterative review loop."""
-
-            issue = self.jira.get_issue(issue_key)
-
-            if not issue:
-
-                return
-
-    
-
-            summary = issue.fields.summary
-
-            original_description = issue.fields.description or ""
-
-            current_description = original_description
-
+        while attempt < MAX_RETRIES:
+            attempt += 1
+            if self.auto_review:
+                logger.info(f"--- Attempt {attempt}/{MAX_RETRIES} ---")
             
-
-            logger.info(f"Processing {issue_key}: {summary}")
-
-    
-
-            if not self.dry_run:
-
-                self.jira.add_comment(issue_key, "🤖 *Bug Fix Agent* has started analyzing this issue.")
-
-                self.jira.transition_issue(issue_key, ["In Progress", "진행 중", "시작"])
-
-    
-
-            MAX_RETRIES = 3 if self.auto_review else 1
-
-            attempt = 0
-
-            modified_files_history = set() # Track all files touched across attempts
-
-            critique_history = [] # Track critiques to detect cycles
-
-    
-
-            while attempt < MAX_RETRIES:
-
-                attempt += 1
-
-                if self.auto_review:
-
-                    logger.info(f"--- Attempt {attempt}/{MAX_RETRIES} ---")
-
-                
-
-                # 1. Identify files (Plan)
-
-    
+            # 1. Identify files (Plan)
             # A. Regex heuristic
             candidates = set(self.find_files_in_text(current_description))
             candidates.update(self.find_files_in_text(summary))

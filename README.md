@@ -1,27 +1,16 @@
 # 🐞 Jira Bug Fix Agent (v0.3)
 
-Welcome! This is an intelligent, automated agent designed to help your team squash bugs faster. It monitors your Jira project for new bug reports, analyzes the relevant code using Google's Gemini LLM, and automatically proposes fixes—all while keeping your codebase safe.
+Welcome! This is an intelligent, automated agent designed to help your team squash bugs faster. It monitors your Jira project for new bug reports, analyzes the relevant code using LLMs via **OpenRouter**, and automatically proposes fixes—all while keeping your codebase safe.
 
 ## ✨ Key Features
-
-*   **Automated Monitoring**: Continuously watches Jira for new bug tickets.
-*   **Smart Analysis**: Uses Gemini to understand the bug report and your codebase context.
-*   **Safe Execution**:
-    *   🔒 **Scope Protection**: Only modifies files in your specified safe directory.
-    *   💾 **Automatic Backups**: Creates `.bak` files before making any changes.
-    *   ✅ **Syntax Validation**: Ensures generated code is valid Python before saving.
-    *   🔄 **Loop Protection**: Detects repetitive feedback cycles and enforces a 3-attempt limit for self-correction.
-*   **Jira Integration**:
-    *   updates ticket status (In Progress -> Done).
-    *   posts comments with "In Progress" notifications.
-    *   provides a **Unified Diff** of the fix directly in the ticket.
-*   **Modular Design**: Clean, maintainable code structure (`jira_agent` package).
-
+...
+*   **Smart Analysis**: Uses state-of-the-art LLMs (via OpenRouter) to understand the bug report and your codebase context.
+...
 ## 🛠️ Prerequisites
 
 *   Python 3.10 or higher
 *   A Jira account (Email & API Token)
-*   A Google Gemini API Key
+*   An **OpenRouter API Key**
 
 ## ⚙️ Configuration
 
@@ -31,13 +20,13 @@ Welcome! This is an intelligent, automated agent designed to help your team squa
     JIRA_SERVER=https://your-domain.atlassian.net
     JIRA_EMAIL=your-email@example.com
     JIRA_API_TOKEN=your-jira-api-token
-    GEMINI_API_KEY=your-gemini-api-key
-    GEMINI_MODEL=gemini-2.5-flash
+    OPENROUTER_API_KEY=your-openrouter-api-key
+    GEMINI_MODEL=google/gemini-2.0-flash-001
     ```
 
 2.  **Dependencies**: Ensure you have the required Python packages installed:
     ```bash
-    pip install jira google-generativeai python-dotenv
+    pip install jira openai python-dotenv
     ```
 
 ## 🚀 Usage

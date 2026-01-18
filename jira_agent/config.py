@@ -17,8 +17,8 @@ class Config:
     JIRA_SERVER: str = os.getenv("JIRA_SERVER", "")
     JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
     JIRA_API_TOKEN: str = os.getenv("JIRA_API_TOKEN", "")
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "google/gemini-2.0-flash-001")
 
     @classmethod
     def validate(cls) -> None:
@@ -27,7 +27,7 @@ class Config:
         if not cls.JIRA_SERVER: missing.append("JIRA_SERVER")
         if not cls.JIRA_EMAIL: missing.append("JIRA_EMAIL")
         if not cls.JIRA_API_TOKEN: missing.append("JIRA_API_TOKEN")
-        if not cls.GEMINI_API_KEY: missing.append("GEMINI_API_KEY")
+        if not cls.OPENROUTER_API_KEY: missing.append("OPENROUTER_API_KEY")
         
         if missing:
             logging.error(f"Missing environment variables: {', '.join(missing)}")

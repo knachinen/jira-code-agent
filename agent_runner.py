@@ -4,7 +4,7 @@ import sys
 import logging
 from jira_agent.config import Config, setup_logging
 from jira_agent.jira_client import JiraClient
-from jira_agent.llm_client import GeminiClient
+from jira_agent.llm_client import LLMClient
 from jira_agent.agent import BugFixAgent
 
 def main():
@@ -25,7 +25,7 @@ def main():
     # Initialize Services
     try:
         jira_client = JiraClient(Config.JIRA_SERVER, Config.JIRA_EMAIL, Config.JIRA_API_TOKEN)
-        llm_client = GeminiClient(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
+        llm_client = LLMClient(Config.OPENROUTER_API_KEY, Config.GEMINI_MODEL)
     except Exception as e:
         logger.critical(f"Failed to initialize services: {e}")
         sys.exit(1)
