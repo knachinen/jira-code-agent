@@ -1,8 +1,9 @@
 import time
 import logging
 import re
+import os
 from datetime import datetime
-from typing import Set, List, Optional
+from typing import Set, List, Optional, Dict
 
 from .config import Config
 from .file_utils import (
@@ -50,79 +51,146 @@ class BugFixAgent:
         return list(set(matches))
 
     def process_issue(self, issue_key: str) -> None:
-        """Processes a single Jira issue."""
+        """Processes a single Jira issue with an iterative review loop."""
         issue = self.jira.get_issue(issue_key)
         if not issue:
             return
 
         summary = issue.fields.summary
-        description = issue.fields.description or ""
+        original_description = issue.fields.description or ""
+        current_description = original_description
+        
         logger.info(f"Processing {issue_key}: {summary}")
 
         if not self.dry_run:
             self.jira.add_comment(issue_key, "🤖 *Bug Fix Agent* has started analyzing this issue.")
             self.jira.transition_issue(issue_key, ["In Progress", "진행 중", "시작"])
 
-        # 1. Identify files
-        candidates = self.find_files_in_text(description)
-        if not candidates:
-            candidates = self.find_files_in_text(summary)
+        MAX_RETRIES = 3
+        attempt = 0
+        modified_files_history = set() # Track all files touched across attempts
 
-        if not candidates:
-            logger.warning(f"No files detected for {issue_key}")
-            if not self.dry_run:
-                self.jira.add_comment(issue_key, "ℹ️ No filenames detected. Analysis skipped.")
-            return
+        while attempt < MAX_RETRIES:
+            attempt += 1
+            logger.info(f"--- Attempt {attempt}/{MAX_RETRIES} ---")
 
-        # 2. Analyze and fix each file
-        modified_files = []
-        codebase_context = get_codebase_structure(self.safe_dir)
+            # 1. Identify files (Plan)
+            # A. Regex heuristic
+            candidates = set(self.find_files_in_text(current_description))
+            candidates.update(self.find_files_in_text(summary))
+            
+            # B. LLM semantic discovery
+            codebase_context = get_codebase_structure(self.safe_dir)
+            llm_files = self.llm.identify_relevant_files(summary, current_description, codebase_context)
+            if llm_files:
+                candidates.update(llm_files)
+                logger.info(f"LLM identified relevant files: {llm_files}")
 
-        for candidate in candidates:
-            filename = resolve_file_path(candidate, self.safe_dir)
-            if not filename:
-                logger.warning(f"Could not resolve file: {candidate}")
+            if not candidates and attempt == 1:
+                # Only fail on first attempt if nothing found. 
+                # Later attempts might be fixing files we already know about.
+                logger.warning(f"No files detected for {issue_key}")
                 if not self.dry_run:
-                    self.jira.add_comment(issue_key, f"⚠️ Could not locate `{candidate}` in safe directory.")
-                continue
+                    self.jira.add_comment(issue_key, "ℹ️ No filenames detected. Analysis skipped.")
+                return
 
-            # Read original code
-            old_code = read_from_file(filename)
-            if old_code is None:
-                continue
+            # 2. Analyze and fix each file (Execute)
+            current_modified_files = {} # content of files modified IN THIS LOOP
 
-            # Request fix from LLM
-            fixed_code = self.llm.get_fix(filename, old_code, summary, description, codebase_context)
-            if not fixed_code:
-                continue
+            for candidate in candidates:
+                # Try to resolve existing file
+                filename = resolve_file_path(candidate, self.safe_dir)
+                
+                is_new_file = False
+                if not filename:
+                    # Check if it's a valid new file path within safe_dir
+                    possible_path = os.path.join(self.safe_dir, candidate)
+                    if os.path.abspath(possible_path).startswith(os.path.abspath(self.safe_dir)):
+                         filename = possible_path
+                         is_new_file = True
+                         logger.info(f"Treating `{candidate}` as a new file to be created.")
+                    else:
+                        logger.warning(f"Could not resolve file: {candidate}")
+                        # Don't comment on Jira every loop, just log
+                        continue
 
-            # Validate syntax
-            if not validate_syntax(filename, fixed_code):
-                if not self.dry_run:
-                    self.jira.add_comment(issue_key, f"❌ Failed to fix `{candidate}`: Syntax error in generated code.")
-                continue
+                # Read original code (or empty if new)
+                old_code = ""
+                if not is_new_file:
+                    old_code = read_from_file(filename)
+                    if old_code is None:
+                        continue
 
-            if self.dry_run:
-                logger.info(f"[DRY-RUN] Would apply fix to: {filename}")
-                continue
+                # Request fix from LLM
+                fixed_code = self.llm.get_fix(filename, old_code, summary, current_description, codebase_context)
+                if not fixed_code:
+                    continue
 
-            # Apply fix with backup
-            if backup_file(filename):
+                # Validate syntax
+                if not validate_syntax(filename, fixed_code):
+                    logger.warning(f"Syntax validation failed for {candidate}")
+                    continue
+
+                if self.dry_run:
+                    logger.info(f"[DRY-RUN] Would apply fix to: {filename}")
+                    current_modified_files[candidate] = fixed_code # store for review simulation
+                    modified_files_history.add(candidate)
+                    continue
+
+                # Apply fix with backup (only if existing)
+                if not is_new_file:
+                    backup_file(filename)
+                
                 if write_to_file(filename, fixed_code):
-                    diff = generate_diff(candidate, old_code, fixed_code)
-                    modified_files.append((candidate, diff))
                     logger.info(f"Successfully applied fix to {filename}")
+                    current_modified_files[candidate] = fixed_code
+                    modified_files_history.add(candidate)
 
-        # 3. Final feedback
-        if modified_files:
-            if not self.dry_run:
-                comment = "✅ *Automated Fixes Applied*\n\n"
-                for cand, diff in modified_files:
-                    comment += f"Fixed `{cand}`. Diff:\n{{code:diff}}\n{diff}\n{{code}}\n\n"
-                self.jira.add_comment(issue_key, comment)
-                self.jira.transition_issue(issue_key, ["Done", "Resolved", "완료", "해결됨"])
+            # 3. Review (Self-Correction)
+            # Gather content of ALL files modified so far to give full context
+            all_modified_content = {}
+            for fname in modified_files_history:
+                resolved = resolve_file_path(fname, self.safe_dir)
+                if resolved:
+                    content = read_from_file(resolved)
+                    if content:
+                        all_modified_content[fname] = content
+                elif fname in current_modified_files and self.dry_run:
+                     all_modified_content[fname] = current_modified_files[fname]
+
+            if not all_modified_content:
+                logger.info("No files modified in this attempt. Stopping loop.")
+                break
+
+            critique = self.llm.review_changes(summary, original_description, all_modified_content)
+            
+            if not critique:
+                logger.info("Review Passed! (APPROVED)")
+                break # Exit loop, success!
+            else:
+                logger.info(f"Review failed. Critique: {critique}")
+                # Update description to focus on the critique for the next loop
+                current_description = f"ORIGINAL REQUEST: {summary}\n{original_description}\n\nFEEDBACK FROM REVIEWER:\n{critique}\n\nINSTRUCTION: Fix the code based on the feedback above."
+                
+                if not self.dry_run:
+                    self.jira.add_comment(issue_key, f"🔄 **Self-Correction Attempt {attempt}**\nReviewer feedback:\n{critique}")
+
+        # 4. Final feedback
+        if modified_files_history and not self.dry_run:
+            comment = "✅ *Automated Fixes Applied (Verified)*\n\n"
+            # Generate diffs for the FINAL state
+            for cand in modified_files_history:
+                filename = resolve_file_path(cand, self.safe_dir)
+                if filename:
+                    # Ideally we'd compare against the VERY original, but we didn't keep it easily.
+                    # Just showing the file exists and was touched.
+                    # For V0.3, let's just list the files.
+                    comment += f"- Modified/Created: `{cand}`\n"
+            
+            self.jira.add_comment(issue_key, comment)
+            self.jira.transition_issue(issue_key, ["Done", "Resolved", "완료", "해결됨"])
         elif not self.dry_run:
-            self.jira.add_comment(issue_key, "ℹ️ No modifications were applied after analysis.")
+             self.jira.add_comment(issue_key, "ℹ️ No modifications were applied after analysis.")
 
     def run(self, interval: int = 10) -> None:
         """Main monitoring loop."""

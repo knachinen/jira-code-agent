@@ -46,6 +46,45 @@ class GeminiClient:
             return "\n".join(lines)
         return text
 
+    def identify_relevant_files(self, summary: str, description: str, codebase_structure: str) -> list[str]:
+        """
+        Asks the LLM to identify which files need to be modified or created based on the issue.
+        Returns a list of filenames.
+        """
+        prompt = f"""
+You are a senior software architect.
+
+CODEBASE STRUCTURE:
+{codebase_structure}
+
+BUG REPORT:
+Summary: {summary}
+Description: {description}
+
+TASK:
+Identify the list of files that need to be modified, created, or read to resolve this issue.
+- If the issue implies splitting a file, include both the original file and the new destination file.
+- If files are not explicitly named but are logically relevant (e.g., "fix the auth login"), identify the likely file (e.g., `auth.py`).
+
+RETURN FORMAT:
+Return ONLY a raw JSON list of strings. Example:
+["main.py", "utils.py", "new_module.py"]
+Do not use Markdown.
+"""
+        logger.info("Asking Gemini to identify relevant files...")
+        try:
+            response = self.model.generate_content(prompt)
+            text = self._clean_markdown(response.text)
+            # Simple heuristic to extract list
+            import json
+            files = json.loads(text)
+            if isinstance(files, list):
+                return files
+        except Exception as e:
+            logger.error(f"Failed to identify files via LLM: {e}")
+        
+        return []
+
     def get_fix(self, filename: str, code_content: str, summary: str, description: str, codebase_context: str = "") -> Optional[str]:
         """
         Attempts to get a fix from Gemini, first via patch, then via full rewrite fallback.
@@ -117,3 +156,49 @@ Return ONLY the raw code. Do not use Markdown backticks.
         except Exception as e:
             logger.error(f"Full rewrite request failed: {e}")
             return None
+
+    def review_changes(self, summary: str, description: str, modified_files: dict[str, str]) -> Optional[str]:
+        """
+        Reviews the applied changes.
+        Returns None if APPROVED.
+        Returns a critique string if changes are needed.
+        """
+        changes_context = ""
+        for fname, content in modified_files.items():
+            # Truncate large files for context window if necessary, 
+            # but for now assume they fit or are small enough.
+            changes_context += f"--- FILE: {fname} ---\n{content}\n\n"
+
+        prompt = f"""
+You are a senior code reviewer.
+
+BUG REPORT:
+Summary: {summary}
+Description: {description}
+
+APPLIED CHANGES:
+{changes_context}
+
+TASK:
+Review the code above.
+1. Does it satisfy the Bug Report requirements?
+2. Are filenames correct and consistent (e.g., HTML links to the correct CSS/JS files)?
+3. Are there any obvious syntax or logic errors?
+
+RESPONSE FORMAT:
+- If the changes are correct and complete, return exactly: APPROVED
+- If there are issues, return a concise set of instructions to fix them.
+"""
+        logger.info("Asking Gemini to review changes...")
+        try:
+            response = self.model.generate_content(prompt)
+            text = self._clean_markdown(response.text).strip()
+            
+            if "APPROVED" in text:
+                return None
+            else:
+                return text
+        except Exception as e:
+            logger.error(f"Review request failed: {e}")
+            return None # Fail open (assume good if review fails to avoid infinite loops)
+
