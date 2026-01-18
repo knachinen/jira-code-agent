@@ -69,6 +69,7 @@ class BugFixAgent:
         MAX_RETRIES = 3
         attempt = 0
         modified_files_history = set() # Track all files touched across attempts
+        critique_history = [] # Track critiques to detect cycles
 
         while attempt < MAX_RETRIES:
             attempt += 1
@@ -168,6 +169,14 @@ class BugFixAgent:
                 logger.info("Review Passed! (APPROVED)")
                 break # Exit loop, success!
             else:
+                # Cycle Detection
+                if critique in critique_history:
+                    logger.warning(f"Cycle detected! Critique repeated: {critique}")
+                    if not self.dry_run:
+                        self.jira.add_comment(issue_key, "⚠️ **Cycle Detected**: The agent is receiving the same feedback repeatedly. Stopping to prevent an infinite loop.")
+                    break
+                
+                critique_history.append(critique)
                 logger.info(f"Review failed. Critique: {critique}")
                 # Update description to focus on the critique for the next loop
                 current_description = f"ORIGINAL REQUEST: {summary}\n{original_description}\n\nFEEDBACK FROM REVIEWER:\n{critique}\n\nINSTRUCTION: Fix the code based on the feedback above."

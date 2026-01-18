@@ -10,6 +10,7 @@ Welcome! This is an intelligent, automated agent designed to help your team squa
     *   🔒 **Scope Protection**: Only modifies files in your specified safe directory.
     *   💾 **Automatic Backups**: Creates `.bak` files before making any changes.
     *   ✅ **Syntax Validation**: Ensures generated code is valid Python before saving.
+    *   🔄 **Loop Protection**: Detects repetitive feedback cycles and enforces a 3-attempt limit for self-correction.
 *   **Jira Integration**:
     *   updates ticket status (In Progress -> Done).
     *   posts comments with "In Progress" notifications.
