@@ -61,3 +61,12 @@ class JiraClient:
         except Exception as e:
             logger.error(f"Failed to fetch issue {issue_key}: {e}")
             return None
+
+    def get_comments(self, issue_key: str) -> List[str]:
+        """Retrieves all comments for an issue as a list of strings."""
+        try:
+            comments = self.client.comments(issue_key)
+            return [c.body for c in comments]
+        except Exception as e:
+            logger.error(f"Failed to fetch comments for {issue_key}: {e}")
+            return []

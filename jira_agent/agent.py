@@ -61,7 +61,20 @@ class BugFixAgent:
 
         summary = issue.fields.summary
         original_description = issue.fields.description or ""
-        current_description = original_description
+        
+        # Fetch comments and append to context
+        comments = self.jira.get_comments(issue_key)
+        relevant_comments = []
+        for c in comments:
+            # Skip bot comments (heuristically)
+            if not any(marker in c for marker in ["🤖", "✅", "🔄", "⚠️", "ℹ️", "❌"]):
+                relevant_comments.append(c)
+        
+        if relevant_comments:
+            comment_context = "\n\nADDITIONAL CONTEXT FROM COMMENTS:\n" + "\n---\n".join(relevant_comments)
+            current_description = original_description + comment_context
+        else:
+            current_description = original_description
         
         logger.info(f"Processing {issue_key}: {summary}")
 

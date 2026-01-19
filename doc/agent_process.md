@@ -10,11 +10,17 @@ The agent runs a continuous polling loop (`agent.run`) that checks for Jira issu
 - **Query**: It fetches recent tickets using JQL (`created >= start_time`).
 - **Reprocessing**: It maintains a local state (`.agent_state.json`) of processed tickets (`known_issues`).
     - If a ticket is **New** (not in state): It is processed immediately.
-    - If a ticket is **Known** but its status is **"To Do" / "Reopened"**: It is removed from the known list and reprocessed. This allows humans to trigger a retry by reopening a ticket.
+    - If a ticket is **Known** but its status is **"To Do" / "Reopened"**: It is removed from the known list and reprocessed. This allows humans to trigger a retry by reopening a ticket and adding comments with further instructions.
 
 ## 2. Planning Phase
 
 Once a ticket is picked up, the agent attempts to understand *where* the change needs to happen.
+
+### Context Gathering
+The agent combines the following into a single "Instruction" for the LLM:
+1. **Summary**: The Jira ticket title.
+2. **Description**: The main ticket body.
+3. **Comments**: All non-bot comments are appended to provide additional context or updated instructions from users.
 
 ### File Identification
 It uses a two-step approach to find relevant files:
