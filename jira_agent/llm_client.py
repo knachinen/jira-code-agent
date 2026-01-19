@@ -21,21 +21,67 @@ class LLMClient:
         logger.info(f"LLMClient initialized with OpenRouter model: {model_name} (Timeout: {timeout}s)")
 
     def apply_search_replace(self, original_code: str, patch_text: str) -> Optional[str]:
-        """Applies SEARCH/REPLACE blocks to the original code."""
+        """Applies SEARCH/REPLACE blocks with whitespace-tolerant matching."""
         pattern = re.compile(r'<<<< SEARCH\n(.*?)\n==== REPLACE\n(.*?)\n>>>>', re.DOTALL)
         matches = pattern.findall(patch_text)
         
         if not matches:
+            logger.warning("No SEARCH/REPLACE blocks found.")
             return None
 
         new_code = original_code
-        for search_block, replace_block in matches:
+        
+        for i, (search_block, replace_block) in enumerate(matches):
             if search_block in new_code:
                 new_code = new_code.replace(search_block, replace_block, 1)
-            else:
-                logger.warning("Search block match failed. Mismatch in original code.")
-                return None
+                continue
+            
+            # Fuzzy Strategy: Match lines stripping whitespace
+            search_lines = [l.strip() for l in search_block.splitlines() if l.strip()]
+            if not search_lines:
+                continue # Skip empty blocks
+
+            original_lines = new_code.splitlines(keepends=True)
+            
+            # Find where the sequence of search_lines appears in original_lines
+            match_index = -1
+            for idx in range(len(original_lines)):
+                # Check if search sequence starts here
+                if idx + len(search_lines) > len(original_lines):
+                    break
                 
+                # Compare snippet
+                snippet = original_lines[idx : idx + len(search_lines)]
+                # Normalize snippet for comparison
+                snippet_stripped = [l.strip() for l in snippet if l.strip()]
+                
+                if snippet_stripped == search_lines:
+                    match_index = idx
+                    break
+            
+            if match_index != -1:
+                # We found the block! Now replace it.
+                logger.info(f"Block {i+1}: Fuzzy match success at line {match_index}.")
+                
+                # Construct the pre-match and post-match parts
+                pre_match = "".join(original_lines[:match_index])
+                # The actual raw text that matched (preserving its original indentation)
+                # Note: We assumed the 'search_lines' covered contiguous lines in original.
+                # If 'snippet_stripped' matched, we replace the RAW lines from original_lines.
+                
+                # Careful: We need to know exactly how many raw lines were consumed.
+                # The 'snippet' variable above contains the raw lines including whitespace.
+                matched_raw_chunk = "".join(original_lines[idx : idx + len(search_lines)])
+                
+                post_match = "".join(original_lines[idx + len(search_lines):])
+                
+                new_code = pre_match + replace_block + "\n" + post_match
+            else:
+                logger.warning(f"Block {i+1}: Patch failed. Could not find search block even with fuzzy match.")
+                # Log snippet for debugging
+                logger.debug(f"Search Block Snippet: {search_lines[:3]}...")
+                return None # Fail to safe full-rewrite
+
         return new_code
 
     def _clean_markdown(self, text: str) -> str:
