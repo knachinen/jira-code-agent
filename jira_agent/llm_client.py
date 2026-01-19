@@ -1,6 +1,7 @@
 import logging
 import re
 import json
+import time
 from typing import Optional, List
 from openai import OpenAI
 from .config import Config
@@ -10,13 +11,14 @@ logger = logging.getLogger(__name__)
 class LLMClient:
     """Client for interacting with OpenRouter API (OpenAI-compatible)."""
 
-    def __init__(self, api_key: str, model_name: str):
+    def __init__(self, api_key: str, model_name: str, timeout: float = 60.0):
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
+            timeout=timeout
         )
         self.model_name = model_name
-        logger.info(f"LLMClient initialized with OpenRouter model: {model_name}")
+        logger.info(f"LLMClient initialized with OpenRouter model: {model_name} (Timeout: {timeout}s)")
 
     def apply_search_replace(self, original_code: str, patch_text: str) -> Optional[str]:
         """Applies SEARCH/REPLACE blocks to the original code."""
@@ -73,11 +75,14 @@ Return ONLY a raw JSON list of strings. Example:
 Do not use Markdown.
 """
         logger.info("Asking LLM to identify relevant files...")
+        start_time = time.time()
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}]
             )
+            elapsed = time.time() - start_time
+            logger.info(f"File identification took {elapsed:.2f}s")
             text = self._clean_markdown(response.choices[0].message.content)
             files = json.loads(text)
             if isinstance(files, list):
@@ -123,11 +128,14 @@ Return the changes using this STRICT block format:
 - Do not use Markdown backticks.
 """
         logger.info(f"Requesting patch for {filename}...")
+        start_time = time.time()
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": patch_prompt}]
             )
+            elapsed = time.time() - start_time
+            logger.info(f"Patch request took {elapsed:.2f}s")
             fixed_code = self.apply_search_replace(code_content, self._clean_markdown(response.choices[0].message.content))
             if fixed_code:
                 return fixed_code
@@ -155,11 +163,14 @@ INSTRUCTION:
 Please rewrite the entire file to fix the bug described above.
 Return ONLY the raw code. Do not use Markdown backticks.
 """
+        start_time = time.time()
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": rewrite_prompt}]
             )
+            elapsed = time.time() - start_time
+            logger.info(f"Full rewrite took {elapsed:.2f}s")
             return self._clean_markdown(response.choices[0].message.content)
         except Exception as e:
             logger.error(f"Full rewrite request failed: {e}")
@@ -194,11 +205,14 @@ RESPONSE FORMAT:
 - If there are issues, return a concise set of instructions to fix them.
 """
         logger.info("Asking LLM to review changes...")
+        start_time = time.time()
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}]
             )
+            elapsed = time.time() - start_time
+            logger.info(f"Review took {elapsed:.2f}s")
             text = self._clean_markdown(response.choices[0].message.content).strip()
             
             if "APPROVED" in text:

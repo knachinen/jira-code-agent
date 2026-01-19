@@ -3,9 +3,21 @@
 Welcome! This is an intelligent, automated agent designed to help your team squash bugs faster. It monitors your Jira project for new bug reports, analyzes the relevant code using LLMs via **OpenRouter**, and automatically proposes fixes—all while keeping your codebase safe.
 
 ## ✨ Key Features
-...
+
+*   **Automated Monitoring**: Continuously watches Jira for new bug tickets.
 *   **Smart Analysis**: Uses state-of-the-art LLMs (via OpenRouter) to understand the bug report and your codebase context.
-...
+*   **Safe Execution**:
+    *   🔒 **Scope Protection**: Only modifies files in your specified safe directory.
+    *   💾 **Automatic Backups**: Creates `.bak` files before making any changes.
+    *   ✅ **Syntax Validation**: Ensures generated code is valid Python before saving.
+    *   🔄 **Loop Protection**: Detects repetitive feedback cycles and enforces a 3-attempt limit for self-correction.
+    *   ⏱️ **Request Timeout**: Uses a default 60-second timeout for LLM requests to handle complex generations.
+*   **Jira Integration**:
+    *   updates ticket status (In Progress -> Done).
+    *   posts comments with "In Progress" notifications.
+    *   provides a **Unified Diff** of the fix directly in the ticket.
+*   **Modular Design**: Clean, maintainable code structure (`jira_agent` package).
+
 ## 🛠️ Prerequisites
 
 *   Python 3.10 or higher
@@ -62,7 +74,7 @@ python agent_runner.py --safe-dir . --auto-review
 1.  **Watch**: The agent polls Jira for tickets created after it started.
 2.  **Identify**: It parses the ticket description to find relevant filenames.
 3.  **Resolve**: It locates these files within your project structure.
-4.  **Patch**: It asks Gemini to generate a fix (using efficient search/replace blocks).
+4.  **Patch**: It asks the LLM to generate a fix (using efficient search/replace blocks).
 5.  **Verify**: It checks the syntax of the new code.
 6.  **Apply**: It backs up the original file and writes the fix.
 7.  **Report**: It posts a diff of the changes to Jira and marks the ticket as "Done".
