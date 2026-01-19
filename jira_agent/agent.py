@@ -86,6 +86,7 @@ class BugFixAgent:
         attempt = 0
         modified_files_history = set() # Track all files touched across attempts
         critique_history = [] # Track critiques to detect cycles
+        original_code_backup = {} # {filename: original_content}
 
         while attempt < MAX_RETRIES:
             attempt += 1
@@ -93,6 +94,7 @@ class BugFixAgent:
                 logger.info(f"--- Attempt {attempt}/{MAX_RETRIES} ---")
             
             # 1. Identify files (Plan)
+            # ... (rest of discovery logic)
             # A. Regex heuristic
             candidates = set(self.find_files_in_text(current_description))
             candidates.update(self.find_files_in_text(summary))
@@ -143,6 +145,10 @@ class BugFixAgent:
                     old_code = read_from_file(filename)
                     if old_code is None:
                         continue
+                
+                # Save original state for diff generation later
+                if filename not in original_code_backup:
+                    original_code_backup[filename] = old_code
 
                 # Request fix from LLM
                 fixed_code = self.llm.get_fix(filename, old_code, summary, current_description, codebase_context)
@@ -217,10 +223,12 @@ class BugFixAgent:
             for cand in modified_files_history:
                 filename = resolve_file_path(cand, self.safe_dir)
                 if filename:
-                    # Ideally we'd compare against the VERY original, but we didn't keep it easily.
-                    # Just showing the file exists and was touched.
-                    # For V0.3, let's just list the files.
-                    comment += f"- Modified/Created: `{cand}`\n"
+                    # Generate final diff
+                    final_code = read_from_file(filename) or ""
+                    orig_code = original_code_backup.get(filename, "")
+                    diff = generate_diff(cand, orig_code, final_code)
+                    
+                    comment += f"Fixed `{cand}`. Diff:\n{{code:diff}}\n{diff}\n{{code}}\n\n"
             
             self.jira.add_comment(issue_key, comment)
             self.jira.transition_issue(issue_key, ["Done", "Resolved", "완료", "해결됨"])

@@ -39,16 +39,18 @@ class LLMClient:
         return new_code
 
     def _clean_markdown(self, text: str) -> str:
-        """Removes markdown code block wrappers if present."""
-        text = text.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            return "\n".join(lines)
-        return text
+        """
+        Extracts code from markdown blocks more robustly.
+        Finds the first block between ``` and ```.
+        """
+        # Regex to find content between triple backticks
+        pattern = re.compile(r'```(?:\w+)?\n(.*?)\n```', re.DOTALL)
+        match = pattern.search(text)
+        if match:
+            return match.group(1).strip()
+        
+        # Fallback: if no backticks found, return text as is (might be raw code)
+        return text.strip()
 
     def identify_relevant_files(self, summary: str, description: str, codebase_structure: str) -> List[str]:
         """
