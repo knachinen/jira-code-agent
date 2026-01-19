@@ -92,6 +92,42 @@ Do not use Markdown.
         
         return []
 
+    def generate_plan(self, summary: str, description: str, codebase_structure: str, relevant_files: List[str]) -> str:
+        """
+        Generates a concise step-by-step plan for the fix.
+        """
+        prompt = f"""
+You are a technical lead.
+
+BUG REPORT:
+Summary: {summary}
+Description: {description}
+
+TARGET FILES:
+{json.dumps(relevant_files)}
+
+CODEBASE CONTEXT:
+{codebase_structure}
+
+TASK:
+Create a concise, step-by-step plan to resolve this issue.
+Focus on WHAT needs to be done in each file.
+Do not include code snippets, just logical steps.
+
+RETURN FORMAT:
+Return a simple markdown list (bullets).
+"""
+        logger.info("Asking LLM to generate plan...")
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return self._clean_markdown(response.choices[0].message.content)
+        except Exception as e:
+            logger.error(f"Failed to generate plan: {e}")
+            return "Could not generate detailed plan."
+
     def get_fix(self, filename: str, code_content: str, summary: str, description: str, codebase_context: str = "") -> Optional[str]:
         """
         Attempts to get a fix from the LLM, first via patch, then via full rewrite fallback.

@@ -112,6 +112,11 @@ class BugFixAgent:
                     self.jira.add_comment(issue_key, "ℹ️ No filenames detected. Analysis skipped.")
                 return
 
+            # --- POST PLAN (Only on first attempt) ---
+            if attempt == 1 and not self.dry_run:
+                plan = self.llm.generate_plan(summary, current_description, codebase_context, list(candidates))
+                self.jira.add_comment(issue_key, f"📋 **Proposed Plan**\n\n{plan}")
+
             # 2. Analyze and fix each file (Execute)
             current_modified_files = {} # content of files modified IN THIS LOOP
 
@@ -207,7 +212,7 @@ class BugFixAgent:
 
         # 4. Final feedback
         if modified_files_history and not self.dry_run:
-            comment = "✅ *Automated Fixes Applied (Verified)*\n\n"
+            comment = "✅ **Execution Report**\n\n"
             # Generate diffs for the FINAL state
             for cand in modified_files_history:
                 filename = resolve_file_path(cand, self.safe_dir)
