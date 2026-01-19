@@ -223,7 +223,17 @@ class BugFixAgent:
                 for issue in reversed(issues):
                     if not self.running:
                         break
-                    if issue.key not in self.known_issues:
+                    
+                    # Support Reprocessing: If issue is known but moved back to an active state
+                    is_known = issue.key in self.known_issues
+                    is_active = issue.fields.status.name.lower() in ["to do", "reopened", "open", "할 일", "재개됨", "열림"]
+                    
+                    if is_known and is_active:
+                        logger.info(f"Detected reopened issue {issue.key}. Removing from known list to allow reprocessing.")
+                        self.known_issues.remove(issue.key)
+                        is_known = False
+
+                    if not is_known:
                         self.known_issues.add(issue.key)
                         self.process_issue(issue.key)
                 
